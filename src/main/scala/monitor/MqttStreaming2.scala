@@ -1,5 +1,7 @@
 package monitor
 
+import java.util.ResourceBundle
+
 import com.alibaba.fastjson.JSONObject
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
@@ -17,26 +19,38 @@ import utils.ParseJson
  *         Time:14:04
  * @Description:
  */
-object MqttStreaming {
+object MqttStreaming2 {
 
-  val jedis = new Jedis("192.168.2.162", 6379, 60000)
+  private val redisIp: String = ResourceBundle.getBundle("application").getString("redisIp")
+  private val mqttIp: String = ResourceBundle.getBundle("application").getString("mqttIp")
+  val jedis = new Jedis(redisIp, 6379, 60000)
 
   def main(args: Array[String]): Unit = {
 
-    val brokerUrl = "tcp://mq.dahanglink.com:1883"
-    val array: Array[String] = Array("machines", "dhlk_Energy", "fineworld")
+    val brokerUrl = "tcp://" + mqttIp + ":1883"
+    val topic="dhlk_Energy"
     val username: String = "dhlk"
     val password: String = "dhlktech"
-    val conf: SparkConf = new SparkConf().setAppName("mqtt")
+    val conf: SparkConf = new SparkConf().setAppName("mqtt_spark"+topic).setMaster("local[*]")
 
     val ssc = new StreamingContext(conf, Milliseconds(100))
 
-    ssc.sparkContext.setLogLevel("WARN")
-    array.foreach(topic => {
-      val stream_data = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_ONLY, Some(topic), Some(username), Some(password), None, None, None, None, None)
+    ssc.sparkContext.setLogLevel("ERROR")
+
+      println(topic + " 正在连接。。。。。。。。。。。。。。。")
+      println("ip " + mqttIp)
+      println("rul " + brokerUrl)
+      println("username " + username)
+      println("psw " + password)
+
+
+      val stream_data = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_ONLY, Some(topic + System.currentTimeMillis()), Some(username), Some(password), None, None, None, None, None)
+
+      println("返回值 " + stream_data)
 
       val value: DStream[(String, String, AnyRef)] = stream_data
         .filter(x => {
+          println(x)
           x.contains("after") && x.contains("table") && x.contains("factoryCode")
         })
         .map(x => {
@@ -49,16 +63,15 @@ object MqttStreaming {
           (factoryCode, table, dcxAfter.toString)
 
         })
-      //    value.print()
+//      value.print()
 
-      value.foreachRDD(part => {
+    value.foreachRDD(part => {
 
-        part.foreach(item => {
-          println(item._3.toString)
-          jedis.setex(item._1 + ":"+item._2.toString,300,item._3.toString)
-        })
-
+      part.foreach(item => {
+        //          println(item._3.toString)
+        jedis.setex(item._1 + ":" + item._2.toString, 300, item._3.toString)
       })
+
     })
 
 
