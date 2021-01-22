@@ -6,6 +6,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.sql.Connection;
@@ -54,8 +55,8 @@ public class HdfsIncrementMonitor {
             System.out.println("dirpath      " + dirpath);
 
             Configuration conf = new Configuration();
-            // 在配置文件里引入core-site.xml，hdfs-site.xml，yarn-site.xml
-            conf.set("fs.defaultFS", "hdfs://nameservice1");
+
+            conf.set("fs.defaultFS", "hdfs://ip-172-31-16-9.cn-northwest-1.compute.internal");
             String pathStr = "";
             String s = "";
             try {
@@ -67,47 +68,53 @@ public class HdfsIncrementMonitor {
                     dirpath = StringUtils.substringBeforeLast(dirpath, "/");
                     files = getFileStatuses(dirpath, conf);
                 }
-                for (int i = files.length - 2; i < files.length - 1; i++) {
-                    pathStr = files[i].getPath().toString();
+                int i = 0;
+                if (new File(dirpath + "/" + new SimpleDateFormat("yyyy-MM-dd").format(System.currentTimeMillis())).exists()) {
+                    i = files.length - 2;
+                } else {
+                    i = files.length - 1;
+                }
+                pathStr = files[i].getPath().toString();
 
-                    s = pathStr.substring(20);
+                System.out.println("pathStr  "+pathStr);
 
-                    FileSystem fs = files[i].getPath().getFileSystem(conf);
+                s = pathStr.substring(20);
+
+                FileSystem fs = files[i].getPath().getFileSystem(conf);
 
 //                    hdfs://nameservice1/data2/dcx/dhlk_tenant_207333/2021-01/2021-01-08/log.1610070946208.txt.tmp
-                    // 文件大小
-                    long totalSize_count = fs.getContentSummary(files[i].getPath()).getLength();
-                    // 该目录下所有的文件的数量
-                    long totalFileCount = listAll(conf, files[i].getPath());
+                // 文件大小
+                long totalSize_count = fs.getContentSummary(files[i].getPath()).getLength();
+                // 该目录下所有的文件的数量
+                long totalFileCount = listAll(conf, files[i].getPath());
 
-                    System.out.println(("".equals(pathStr) ? "." : pathStr) + "\t" + totalSize_count + "\t" + totalFileCount);
-                    // 把字节换算成 mb
-                    long totalSize = totalSize_count/1024;
+                System.out.println(("".equals(pathStr) ? "." : pathStr) + "\t" + totalSize_count + "\t" + totalFileCount);
+                // 把字节换算成 mb
+                long totalSize = totalSize_count / 1024;
 
-                    String sql = "";
+                String sql = "";
 
-                    sql = "insert into dhlk_hdfs_size(path,tenant,device,total_size,total_count,data_date)" +
-                            " values('" + pathStr + "','" + s.split("/")[1] + "','" + s.split("/")[2] + "'," + totalSize + "," + totalFileCount + ",'" + StringUtils.substringAfterLast(s, "/") + "')";
-                    System.out.println(sql);
+                sql = "insert into dhlk_hdfs_size(path,tenant,device,total_size,total_count,data_date)" +
+                        " values('" + pathStr + "','" + s.split("/")[1] + "','" + s.split("/")[2] + "'," + totalSize + "," + totalFileCount + ",'" +date + "')";
+                System.out.println(sql);
 
 
-                    PreparedStatement ptmt = null;
+                PreparedStatement ptmt = null;
+                try {
+                    ptmt = conn.prepareStatement(sql);
+                    ptmt.executeUpdate();
+                } catch (Exception e) {
+                    e.printStackTrace();
+
+                } finally {
+                    //conn.close();
                     try {
-                        ptmt = conn.prepareStatement(sql);
-                        ptmt.executeUpdate();
-                    } catch (Exception e) {
+                        fs.close();
+                    } catch (IOException e) {
                         e.printStackTrace();
-
-                    } finally {
-                        //conn.close();
-                        try {
-                            fs.close();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
                     }
-
                 }
+
             } catch (Exception e) {
                 //获取当前系统时间
                 // 如果有FileNotFoundException异常，表示没有当天的数据产生，当天的数据量为0
