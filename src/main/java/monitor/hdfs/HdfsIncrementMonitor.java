@@ -6,9 +6,11 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
+import javax.sound.midi.Soundbank;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.URI;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -42,7 +44,7 @@ public class HdfsIncrementMonitor {
         // 获取昨天日期，当作参数传入
         String date = new SimpleDateFormat("yyyy-MM-dd").format(System.currentTimeMillis() - 1000 * 60 * 60 * 24);
 
-        HashSet set = FileListUtil.filesList("/data2");
+        HashSet set = FileListUtil.filesList("/data");
 
         for (Object o : set) {
             hashSet.add(StringUtils.substringBeforeLast(o.toString(), "/"));
@@ -56,7 +58,7 @@ public class HdfsIncrementMonitor {
 
             Configuration conf = new Configuration();
 
-            conf.set("fs.defaultFS", "hdfs://ip-172-31-16-9.cn-northwest-1.compute.internal");
+            conf.set("fs.defaultFS", "hdfs://ip-172-31-16-9.cn-northwest-1.compute.internal:8020");
             String pathStr = "";
             String s = "";
             try {
@@ -69,7 +71,9 @@ public class HdfsIncrementMonitor {
                     files = getFileStatuses(dirpath, conf);
                 }
                 int i = 0;
-                if (new File(dirpath + "/" + new SimpleDateFormat("yyyy-MM-dd").format(System.currentTimeMillis())).exists()) {
+                // /data2/dhlk_tenant_685000/dhlk_tb_product_300141/2021-01/2021-01-26
+                String pathname = dirpath + "/" + new SimpleDateFormat("yyyy-MM-dd").format(System.currentTimeMillis());
+                if (testListStatus(pathname)) {
                     i = files.length - 2;
                 } else {
                     i = files.length - 1;
@@ -78,7 +82,7 @@ public class HdfsIncrementMonitor {
 
                 System.out.println("pathStr  "+pathStr);
 
-                s = pathStr.substring(20);
+                s = pathStr.substring(58);
 
                 FileSystem fs = files[i].getPath().getFileSystem(conf);
 
@@ -172,6 +176,36 @@ public class HdfsIncrementMonitor {
         fs.close();
 
         return totalFileCount;
+    }
+
+
+    public static boolean testListStatus(String path) {
+
+        boolean b = true;
+        FileSystem fs = null;
+        try {
+
+            // 1 获取文件配置信息
+            Configuration configuration = new Configuration();
+             fs = FileSystem.get(new URI("hdfs://ip-172-31-16-9.cn-northwest-1.compute.internal:8020/"), configuration, "root");
+            // 2 判断是文件还是文件夹
+            FileStatus[] listStatus = new FileStatus[0];
+            fs.listStatus(new Path(path));
+
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            b = false;
+        }finally {
+            // 3 关闭资源
+            try {
+                fs.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return b;
+
     }
 
 
